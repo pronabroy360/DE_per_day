@@ -1,4 +1,3 @@
-Great — now that I have all five parts, here's your **very detailed combined guideline** based on the full video tutorial: **“Orchestrating Snowflake Jobs with Apache Airflow in a Dockerized Environment”**.
 
 ---
 
