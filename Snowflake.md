@@ -1,6 +1,5 @@
 ## **Comprehensive Guide to Snowflake Data Warehouse System**
 
----
 
 ### **1. Introduction to Snowflake**
 
