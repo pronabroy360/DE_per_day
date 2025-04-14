@@ -99,3 +99,123 @@
 ---
 
 These notes provide a deep dive into Spark's architecture, focusing on RDDs, their role in fault tolerance, and how Spark optimizes distributed computation compared to traditional MapReduce-based systems.
+
+
+
+Here’s a detailed and structured set of notes compiled from the provided transcript, covering **RDD Partitioning**, **RDD Reuse**, **Lineage Graph**, **Narrow Dependencies**, and **Wide Dependencies** in Apache Spark:
+
+---
+
+### 🔹 **RDD Partitioning**
+![alt text](image-5.png)
+- **Purpose:** 
+  - Important for *data locality* and performance in distributed computations.
+  - Enables more efficient joins and batch operations by reducing data movement across the network.
+
+- **Types of Partitioning:**
+  1. **Hash Partitioning:**
+     - Generally provides a *uniform distribution* of data.
+     - Good when keys are randomly distributed.
+  2. **Range Partitioning:**
+     - Useful for *locality-sensitive* operations.
+     - Keeps records with nearby keys together.
+     - Beneficial for range queries or ordered processing.
+
+- **Data Collocation:**
+  - If two datasets are partitioned the same way (e.g., by the same partition function), a *join* operation on those datasets requires significantly *less network shuffling*.
+
+- **How to Share Partition Functions:**
+  - You can extract the partition function from RDD **A**, and apply it to RDD **B** to ensure aligned partitioning.
+  - This alignment helps reduce network costs during joins or other multi-RDD operations.
+
+---
+
+### 🔹 **RDD Reuse**
+
+![alt text](image-6.png)
+- **Comparison to MapReduce:**
+  - In MapReduce, intermediate state must be persisted to disk, adding overhead.
+  - Spark allows *in-memory persistence*, enabling *efficient reuse* of RDDs across multiple computations.
+
+- **Persisting an RDD:**
+  - Use `.persist()` method to store an RDD in memory.
+  - Spark keeps it in memory using an **LRU (Least Recently Used)** policy.
+  - Helps for *interactive queries* or iterative machine learning workloads.
+
+- **Storage Trade-offs:**
+  1. **In-Memory Java Objects:**
+     - Fast access but consumes RAM.
+  2. **Serialized In-Memory Storage:**
+     - Saves space but slower due to (de)serialization overhead.
+  3. **Disk Storage:**
+     - More storage space available but significantly slower access.
+  - Spark may **spill to disk** when memory is full.
+
+---
+
+### 🔹 **Lineage Graph: Fault Tolerance Mechanism**
+![alt text](image-7.png)
+- **Lineage vs. Checkpointing:**
+  - Traditional systems like Hadoop use **checkpointing**, which is costly.
+  - Spark avoids this by using **lineage graphs** for *lazy fault recovery*.
+
+- **What is a Lineage Graph?**
+  - A *directed acyclic graph (DAG)* showing how an RDD is derived from other RDDs.
+  - Stores the sequence of transformations (e.g., map, filter) needed to recompute data.
+
+- **Recovery via Lineage:**
+  - If a partition (e.g., P2) is lost, Spark:
+    1. Refers to the lineage graph.
+    2. Recomputes only that partition by replaying necessary operations from source data.
+    3. Distributes this recomputation across available workers.
+
+- **Efficiency:**
+  - The lineage graph is **compact (a few KBs)** and avoids full replication.
+  - Enables faster, *on-demand recomputation* without checkpointing every transformation.
+
+---
+
+### 🔹 **Narrow Dependencies**
+![alt text](image-8.png)
+- **Definition:**
+  - Each partition in the child RDD depends on *only one* partition in the parent RDD.
+  - Examples: `map`, `filter`, `union`, etc.
+
+- **Benefits:**
+  - Easy to *parallelize recomputation* in case of partition loss.
+  - Lost data can be recomputed by reapplying transformations to the parent partition.
+  - Suitable for fault-tolerance via lineage.
+
+- **Example Scenario:**
+  - Partition `P1` in RDD-A → transformed to Partition `P1` in RDD-B.
+  - Failure of `P1` in RDD-B can be recovered *locally* without touching other partitions.
+
+---
+
+### 🔹 **Wide Dependencies**
+![alt text](image-9.png)
+- **Definition:**
+  - Each partition in the child RDD depends on *multiple* partitions from the parent RDD.
+  - Typically results in a **shuffle** (network transfer).
+  - Examples: `groupByKey`, `reduceByKey`, `join`.
+
+- **Challenges:**
+  - Recomputing data becomes expensive if a node fails because:
+    - It requires *re-accessing and reshuffling* all contributing parent partitions.
+    - Data isn't easily localized; may involve many-to-one mappings.
+
+- **Example - `groupByKey`:**
+  - Partitions with key-value pairs get split by key across different nodes.
+  - If a node holding key `B` fails, we need to recompute *all data with key B* by:
+    - Going back to the original source RDDs (e.g., from HDFS).
+    - Re-running the entire pipeline (shuffle included).
+
+- **Solution: Checkpointing**
+  - After wide dependency operations, **checkpoint the output**.
+  - Converts the output into a **new narrow dependency**, making future recomputations easier.
+  - Avoids repeating the expensive shuffle.
+
+- **Why This Works:**
+  - Because RDDs are **immutable**, checkpointing them is easy and contention-free.
+  - No locking or consistency issues arise.
+
