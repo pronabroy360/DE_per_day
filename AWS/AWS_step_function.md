@@ -1,4 +1,3 @@
-Here's a compiled, detailed guide notebook combining the two parts of the tutorial you provided:
 
 ---
 
@@ -347,5 +346,6 @@ This guide covered the process of orchestrating SQL queries in Amazon Redshift u
 - Monitor and test the workflow execution.
 
 By following this guide, you can automate and manage complex data workflows with minimal coding while ensuring scalability and fault tolerance in your data pipelines.
+
 
 ---
